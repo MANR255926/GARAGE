@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { Calendar, Car, MoreVertical } from "lucide-react";
 import type { Job, Mechanic } from "@/lib/mock-data";

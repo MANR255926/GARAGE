@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { Clock, Award, Star, Globe, MoreVertical } from "lucide-react";
 import type { Mechanic } from "@/lib/mock-data";

@@ -1,4 +1,4 @@
-﻿// src/lib/mock-data.ts
+// src/lib/mock-data.ts
 // All mock data — no real Supabase calls in this session.
 
 export type JobStatus = "pending" | "in_progress" | "on_hold" | "completed";

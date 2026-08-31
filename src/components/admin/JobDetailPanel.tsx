@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { Camera, Download, Share2, Maximize2 } from "lucide-react";
 import { ProgressBar } from "./ProgressBar";
