@@ -1,0 +1,63 @@
+﻿@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Light theme (default) ─── */
+:root {
+  --lime:   #D7F13A;
+  --ink:    #14161A;
+  --ink-2:  #1E2126;
+  --page:   #F3F4F2;
+  --card:   #FFFFFF;
+  --chip:   #E7E9E4;
+  --slate:  #8A93A0;
+  --fill:   #AFC2D4;
+  --border: #E7E9E4;
+  --warn:   #FCEFD6;
+}
+
+/* ─── Dark theme ─── */
+.dark {
+  --lime:   #D7F13A;
+  --ink:    #F3F4F2;
+  --ink-2:  #26282E;
+  --page:   #101114;
+  --card:   #1A1C21;
+  --chip:   #26282E;
+  --slate:  #8A93A0;
+  --fill:   #4F6478;
+  --border: #2A2D33;
+  --warn:   #3A331C;
+}
+
+/* ─── Base resets ─── */
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+  background-color: var(--page);
+  color: var(--ink);
+}
+
+body {
+  font-family: var(--font-inter), system-ui, sans-serif;
+}
+
+/* ─── Smooth theme transitions ─── */
+.theme-transition,
+.theme-transition * {
+  transition-property: background-color, border-color, color;
+  transition-duration: 300ms;
+  transition-timing-function: ease;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
