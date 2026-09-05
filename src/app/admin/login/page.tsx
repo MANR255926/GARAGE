@@ -1,59 +1,80 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Wrench, Sun, Moon, ChevronRight } from "lucide-react";
 import { BackgroundPattern } from "@/components/shared/BackgroundPattern";
 import { useTheme } from "@/components/shared/ThemeProvider";
-
-type Step = "phone" | "otp";
+import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
+  const router = useRouter();
   const { theme, toggleTheme } = useTheme();
   const dark = theme === "dark";
 
-  const [step, setStep] = useState<Step>("phone");
-  const [phone, setPhone] = useState("");
-  const [otp, setOtp] = useState(["", "", "", "", "", ""]);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  function handleSendCode(e: React.FormEvent) {
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        const { data: profile } = await supabase
+          .from("users")
+          .select("role")
+          .eq("id", session.user.id)
+          .single();
+        if (profile?.role === "admin") {
+          router.replace("/admin/dashboard");
+        }
+      }
+    });
+  }, [router]);
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (phone.length < 7) {
-      setError("Enter a valid phone number.");
+    if (!email || !password) {
+      setError("Please enter both email and password.");
       return;
     }
     setError("");
-    setStep("otp");
-  }
+    setLoading(true);
 
-  function handleOtpChange(idx: number, val: string) {
-    if (!/^\d?$/.test(val)) return;
-    const next = [...otp];
-    next[idx] = val;
-    setOtp(next);
-    if (val && idx < 5) {
-      const el = document.getElementById(`otp-${idx + 1}`);
-      (el as HTMLInputElement | null)?.focus();
-    }
-  }
+    try {
+      const supabase = createClient();
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-  function handleOtpKeyDown(idx: number, e: React.KeyboardEvent) {
-    if (e.key === "Backspace" && !otp[idx] && idx > 0) {
-      const el = document.getElementById(`otp-${idx - 1}`);
-      (el as HTMLInputElement | null)?.focus();
-    }
-  }
+      if (authError || !data.user) {
+        setError(authError?.message || "Invalid login credentials.");
+        setLoading(false);
+        return;
+      }
 
-  function handleVerify(e: React.FormEvent) {
-    e.preventDefault();
-    const code = otp.join("");
-    if (code.length < 6) {
-      setError("Enter the 6-digit code.");
-      return;
+      // Verify admin role
+      const { data: profile, error: profileError } = await supabase
+        .from("users")
+        .select("role")
+        .eq("id", data.user.id)
+        .single();
+
+      if (profileError || !profile || profile.role !== "admin") {
+        await supabase.auth.signOut();
+        setError("Access denied: Not an administrator account.");
+        setLoading(false);
+        return;
+      }
+
+      router.push("/admin/dashboard");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "An unexpected error occurred.";
+      setError(msg);
+      setLoading(false);
     }
-    // Mock: any 6-digit code succeeds
-    setError("");
-    alert(`Mock login success! Code: ${code}`);
   }
 
   const shadow = dark
@@ -100,112 +121,97 @@ export default function LoginPage() {
           >
             <Wrench size={18} color="var(--lime)" />
           </div>
-          <span className="font-oswald font-semibold text-xl tracking-wide" style={{ color: "var(--ink)" }}>
+          <span
+            className="font-oswald font-semibold text-xl tracking-wide"
+            style={{ color: "var(--ink)" }}
+          >
             ALLYAN GARAGE
           </span>
         </div>
 
-        {step === "phone" ? (
-          <>
-            <h1 className="font-oswald text-2xl font-semibold mb-1" style={{ color: "var(--ink)" }}>
-              Admin Login
-            </h1>
-            <p className="font-inter text-xs mb-6" style={{ color: "var(--slate)" }}>
-              Enter your registered phone number to receive a one-time code.
+        <h1
+          className="font-oswald text-2xl font-semibold mb-1"
+          style={{ color: "var(--ink)" }}
+        >
+          Admin Login
+        </h1>
+        <p
+          className="font-inter text-xs mb-6"
+          style={{ color: "var(--slate)" }}
+        >
+          Enter your admin email and password to sign in.
+        </p>
+
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <div>
+            <label
+              htmlFor="input-email"
+              className="font-inter text-xs font-semibold block mb-1.5"
+              style={{ color: "var(--ink)" }}
+            >
+              Email Address
+            </label>
+            <input
+              id="input-email"
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="admin@allyangarage.com"
+              className="w-full rounded-xl px-4 py-3 font-inter text-sm border outline-none"
+              style={{
+                background: "var(--chip)",
+                color: "var(--ink)",
+                borderColor: error ? "#EF4444" : "var(--border)",
+              }}
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="input-password"
+              className="font-inter text-xs font-semibold block mb-1.5"
+              style={{ color: "var(--ink)" }}
+            >
+              Password
+            </label>
+            <input
+              id="input-password"
+              type="password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••••••"
+              className="w-full rounded-xl px-4 py-3 font-inter text-sm border outline-none"
+              style={{
+                background: "var(--chip)",
+                color: "var(--ink)",
+                borderColor: error ? "#EF4444" : "var(--border)",
+              }}
+            />
+          </div>
+
+          {error && (
+            <p
+              id="login-error-msg"
+              className="font-inter text-[11px] text-center"
+              style={{ color: "#EF4444" }}
+            >
+              {error}
             </p>
+          )}
 
-            <form onSubmit={handleSendCode} className="flex flex-col gap-4">
-              <div>
-                <label className="font-inter text-xs font-semibold block mb-1.5" style={{ color: "var(--ink)" }}>
-                  Phone Number
-                </label>
-                <input
-                  id="input-phone"
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="+92 300 0000000"
-                  className="w-full rounded-xl px-4 py-3 font-inter text-sm border outline-none"
-                  style={{
-                    background: "var(--chip)",
-                    color: "var(--ink)",
-                    borderColor: error ? "#EF4444" : "var(--border)",
-                  }}
-                />
-                {error && (
-                  <p className="font-inter text-[11px] mt-1" style={{ color: "#EF4444" }}>
-                    {error}
-                  </p>
-                )}
-              </div>
-
-              <button
-                id="btn-send-code"
-                type="submit"
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-inter text-sm font-semibold transition-opacity hover:opacity-90"
-                style={{ background: "var(--lime)", color: "var(--ink-2)" }}
-              >
-                Send Code <ChevronRight size={16} />
-              </button>
-            </form>
-          </>
-        ) : (
-          <>
-            <h1 className="font-oswald text-2xl font-semibold mb-1" style={{ color: "var(--ink)" }}>
-              Enter OTP
-            </h1>
-            <p className="font-inter text-xs mb-6" style={{ color: "var(--slate)" }}>
-              We sent a 6-digit code to <strong>{phone}</strong>.{" "}
-              <button
-                className="underline"
-                style={{ color: "var(--lime)" }}
-                onClick={() => { setStep("phone"); setOtp(["","","","","",""]); setError(""); }}
-              >
-                Change
-              </button>
-            </p>
-
-            <form onSubmit={handleVerify} className="flex flex-col gap-4">
-              {/* Odometer-style OTP boxes */}
-              <div className="flex gap-2 justify-center">
-                {otp.map((digit, i) => (
-                  <input
-                    key={i}
-                    id={`otp-${i}`}
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={1}
-                    value={digit}
-                    onChange={(e) => handleOtpChange(i, e.target.value)}
-                    onKeyDown={(e) => handleOtpKeyDown(i, e)}
-                    className="w-12 h-14 text-center rounded-xl font-mono text-xl font-semibold border outline-none transition-all"
-                    style={{
-                      background: digit ? "var(--ink-2)" : "var(--chip)",
-                      color: digit ? "var(--lime)" : "var(--ink)",
-                      borderColor: error ? "#EF4444" : "var(--border)",
-                    }}
-                    aria-label={`OTP digit ${i + 1}`}
-                  />
-                ))}
-              </div>
-
-              {error && (
-                <p className="font-inter text-[11px] text-center" style={{ color: "#EF4444" }}>
-                  {error}
-                </p>
-              )}
-
-              <button
-                id="btn-verify-otp"
-                type="submit"
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-inter text-sm font-semibold transition-opacity hover:opacity-90"
-                style={{ background: "var(--lime)", color: "var(--ink-2)" }}
-              >
-                Verify &amp; Sign In
-              </button>
-            </form>
-          </>
-        )}
+          <button
+            id="btn-admin-login"
+            type="submit"
+            disabled={loading}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-inter text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-50 mt-1"
+            style={{ background: "var(--lime)", color: "var(--ink-2)" }}
+          >
+            {loading ? "Signing In..." : "Sign In"}{" "}
+            <ChevronRight size={16} />
+          </button>
+        </form>
       </div>
     </div>
   );

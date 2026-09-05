@@ -1,10 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { NavPill } from "@/components/admin/NavPill";
 import { BackgroundPattern } from "@/components/shared/BackgroundPattern";
+import { createClient } from "@/lib/supabase/client";
 
 export default function SettingsPage() {
+  const router = useRouter();
+  const [checkingAuth, setCheckingAuth] = useState(true);
   const [isOpen, setIsOpen] = useState(true);
   const [openingTime, setOpeningTime] = useState("08:00");
   const [closingTime, setClosingTime] = useState("17:00");
@@ -13,31 +17,57 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    async function loadSettings() {
-      try {
-        const res = await fetch("/api/shop-settings");
-        const data = await res.json();
-        if (data.settings) {
-          setIsOpen(Boolean(data.settings.is_open));
-          if (data.settings.opening_time) {
-            setOpeningTime(data.settings.opening_time.slice(0, 5));
-          }
-          if (data.settings.closing_time) {
-            setClosingTime(data.settings.closing_time.slice(0, 5));
-          }
-          if (data.settings.message) {
-            setAnnouncement(data.settings.message);
-          }
+  async function loadSettings() {
+    try {
+      const res = await fetch("/api/shop-settings");
+      const data = await res.json();
+      if (data.settings) {
+        setIsOpen(Boolean(data.settings.is_open));
+        if (data.settings.opening_time) {
+          setOpeningTime(data.settings.opening_time.slice(0, 5));
         }
-      } catch (err) {
-        console.error("Failed to load settings:", err);
-      } finally {
-        setLoading(false);
+        if (data.settings.closing_time) {
+          setClosingTime(data.settings.closing_time.slice(0, 5));
+        }
+        if (data.settings.message) {
+          setAnnouncement(data.settings.message);
+        }
       }
+    } catch (err) {
+      console.error("Failed to load settings:", err);
+    } finally {
+      setLoading(false);
     }
-    loadSettings();
-  }, []);
+  }
+
+  useEffect(() => {
+    const supabase = createClient();
+    async function checkAuth() {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.user) {
+        router.replace("/admin/login");
+        return;
+      }
+
+      const { data: profile, error } = await supabase
+        .from("users")
+        .select("role")
+        .eq("id", session.user.id)
+        .single();
+
+      if (error || !profile || profile.role !== "admin") {
+        router.replace("/error-page?code=403");
+        return;
+      }
+
+      setCheckingAuth(false);
+      loadSettings();
+    }
+    checkAuth();
+  }, [router]);
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -63,6 +93,29 @@ export default function SettingsPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  if (checkingAuth) {
+    return (
+      <div
+        className="min-h-screen w-full flex items-center justify-center"
+        style={{ background: "var(--page)" }}
+      >
+        <BackgroundPattern />
+        <div className="flex flex-col items-center gap-3 relative" style={{ zIndex: 10 }}>
+          <div
+            className="w-10 h-10 rounded-full animate-spin"
+            style={{
+              border: "3px solid var(--border)",
+              borderTopColor: "var(--lime)",
+            }}
+          />
+          <p className="font-inter text-xs font-medium" style={{ color: "var(--slate)" }}>
+            Verifying admin access...
+          </p>
+        </div>
+      </div>
+    );
   }
 
   return (

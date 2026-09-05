@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Plus, Pencil, Trash2, X, Check } from "lucide-react";
 import { NavPill } from "@/components/admin/NavPill";
 import { BackgroundPattern } from "@/components/shared/BackgroundPattern";
 import { type Service } from "@/lib/mock-data";
+import { createClient } from "@/lib/supabase/client";
 
 type ServiceForm = Omit<Service, "id">;
 
@@ -17,6 +19,8 @@ const EMPTY_FORM: ServiceForm = {
 };
 
 export default function ServicesPage() {
+  const router = useRouter();
+  const [checkingAuth, setCheckingAuth] = useState(true);
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -48,8 +52,56 @@ export default function ServicesPage() {
   }
 
   useEffect(() => {
-    loadServices();
-  }, []);
+    const supabase = createClient();
+    async function checkAuth() {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.user) {
+        router.replace("/admin/login");
+        return;
+      }
+
+      const { data: profile, error } = await supabase
+        .from("users")
+        .select("role")
+        .eq("id", session.user.id)
+        .single();
+
+      if (error || !profile || profile.role !== "admin") {
+        router.replace("/error-page?code=403");
+        return;
+      }
+
+      setCheckingAuth(false);
+      loadServices();
+    }
+    checkAuth();
+  }, [router]);
+
+  if (checkingAuth) {
+    return (
+      <div
+        className="min-h-screen w-full flex items-center justify-center"
+        style={{ background: "var(--page)" }}
+      >
+        <BackgroundPattern />
+        <div className="flex flex-col items-center gap-3 relative" style={{ zIndex: 10 }}>
+          <div
+            className="w-10 h-10 rounded-full animate-spin"
+            style={{
+              border: "3px solid var(--border)",
+              borderTopColor: "var(--lime)",
+            }}
+          />
+          <p className="font-inter text-xs font-medium" style={{ color: "var(--slate)" }}>
+            Verifying admin access...
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   function openAdd() {
     setEditingId(null);

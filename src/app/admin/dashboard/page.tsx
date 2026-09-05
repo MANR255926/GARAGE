@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, Calendar, Plus } from "lucide-react";
 import { BackgroundPattern } from "@/components/shared/BackgroundPattern";
 import { NavPill } from "@/components/admin/NavPill";
@@ -9,10 +10,64 @@ import { JobDetailPanel } from "@/components/admin/JobDetailPanel";
 import { MechanicPanel } from "@/components/admin/MechanicPanel";
 import { UpdateJobStatusModal } from "@/components/admin/UpdateJobStatusModal";
 import { JOBS, MECHANICS } from "@/lib/mock-data";
+import { createClient } from "@/lib/supabase/client";
 
 export default function DashboardPage() {
+  const router = useRouter();
+  const [checkingAuth, setCheckingAuth] = useState(true);
   const [selectedId, setSelectedId] = useState(1);
   const [modalOpen, setModalOpen] = useState(false);
+
+  useEffect(() => {
+    const supabase = createClient();
+    async function checkAuth() {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.user) {
+        router.replace("/admin/login");
+        return;
+      }
+
+      const { data: profile, error } = await supabase
+        .from("users")
+        .select("role")
+        .eq("id", session.user.id)
+        .single();
+
+      if (error || !profile || profile.role !== "admin") {
+        router.replace("/error-page?code=403");
+        return;
+      }
+
+      setCheckingAuth(false);
+    }
+    checkAuth();
+  }, [router]);
+
+  if (checkingAuth) {
+    return (
+      <div
+        className="min-h-screen w-full flex items-center justify-center"
+        style={{ background: "var(--page)" }}
+      >
+        <BackgroundPattern />
+        <div className="flex flex-col items-center gap-3 relative" style={{ zIndex: 10 }}>
+          <div
+            className="w-10 h-10 rounded-full animate-spin"
+            style={{
+              border: "3px solid var(--border)",
+              borderTopColor: "var(--lime)",
+            }}
+          />
+          <p className="font-inter text-xs font-medium" style={{ color: "var(--slate)" }}>
+            Verifying admin access...
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const job = JOBS.find((j) => j.id === selectedId)!;
   const mechanic = MECHANICS[job.mechanicId];

@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import {
   LayoutGrid,
   Wrench,
@@ -11,8 +12,10 @@ import {
   Moon,
   MessageSquare,
   Bell,
+  LogOut,
 } from "lucide-react";
 import { useTheme } from "@/components/shared/ThemeProvider";
+import { createClient } from "@/lib/supabase/client";
 
 interface NavPillProps {
   activeTab?: number;
@@ -23,11 +26,11 @@ interface NavPillProps {
 }
 
 const NAV_ITEMS = [
-  { Icon: LayoutGrid,   label: "Dashboard" },
-  { Icon: Wrench,       label: "Workshop"  },
-  { Icon: ClipboardList,label: "Bookings"  },
-  { Icon: Settings,     label: "Settings"  },
-  { Icon: Users,        label: "Team"      },
+  { Icon: LayoutGrid,   label: "Dashboard", href: "/admin/dashboard" },
+  { Icon: Wrench,       label: "Workshop",  href: "/admin/dashboard" },
+  { Icon: ClipboardList,label: "Services",  href: "/admin/services" },
+  { Icon: Settings,     label: "Settings",  href: "/admin/settings" },
+  { Icon: Users,        label: "Team",      href: "/admin/dashboard" },
 ];
 
 export function NavPill({
@@ -37,8 +40,28 @@ export function NavPill({
   adminRole = "Admin Cashier",
   adminInitials = "DB",
 }: NavPillProps) {
+  const router = useRouter();
   const { theme, toggleTheme } = useTheme();
   const dark = theme === "dark";
+
+  async function handleSignOut() {
+    try {
+      const supabase = createClient();
+      await supabase.auth.signOut();
+      router.push("/admin/login");
+    } catch (err) {
+      console.error("Sign out error:", err);
+      router.push("/admin/login");
+    }
+  }
+
+  function handleTabClick(i: number, href: string) {
+    if (onTabChange) {
+      onTabChange(i);
+    } else if (href) {
+      router.push(href);
+    }
+  }
 
   return (
     <header className="flex items-center justify-between mb-6">
@@ -64,13 +87,13 @@ export function NavPill({
         style={{ background: dark ? "#000000" : "var(--ink-2)" }}
         aria-label="Main navigation"
       >
-        {NAV_ITEMS.map(({ Icon, label }, i) => (
+        {NAV_ITEMS.map(({ Icon, label, href }, i) => (
           <button
             key={label}
             id={`nav-${label.toLowerCase()}`}
             aria-label={label}
             aria-current={i === activeTab ? "page" : undefined}
-            onClick={() => onTabChange?.(i)}
+            onClick={() => handleTabClick(i, href)}
             className="w-9 h-9 rounded-full flex items-center justify-center transition-colors"
             style={{
               background: i === activeTab ? "var(--lime)" : "transparent",
@@ -156,7 +179,7 @@ export function NavPill({
           />
         </button>
 
-        {/* Admin profile */}
+        {/* Admin profile & Sign out */}
         <div className="flex items-center gap-2 pl-1">
           <div
             className="w-9 h-9 rounded-full flex items-center justify-center font-inter text-xs font-semibold"
@@ -172,6 +195,19 @@ export function NavPill({
               {adminRole}
             </p>
           </div>
+          <button
+            id="btn-admin-signout"
+            onClick={handleSignOut}
+            title="Sign out"
+            aria-label="Sign out"
+            className="w-8 h-8 rounded-full flex items-center justify-center transition-opacity hover:opacity-80 ml-1 cursor-pointer"
+            style={{
+              background: "var(--chip)",
+              color: "var(--slate)",
+            }}
+          >
+            <LogOut size={14} />
+          </button>
         </div>
       </div>
     </header>
