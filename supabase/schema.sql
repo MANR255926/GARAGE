@@ -37,6 +37,35 @@ CREATE TRIGGER trg_users_updated_at
   BEFORE UPDATE ON public.users
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
+-- ── Auth user sync trigger ───────────────────────────────────
+-- Automatically sync new auth.users (including anonymous clients) to public.users
+
+CREATE OR REPLACE FUNCTION public.handle_new_auth_user()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  INSERT INTO public.users (id, name, phone, role)
+  VALUES (
+    NEW.id,
+    COALESCE(NEW.raw_user_meta_data->>'name', 'Guest User'),
+    COALESCE(NEW.phone, NEW.email, NEW.id::text),
+    'client'
+  )
+  ON CONFLICT (id) DO UPDATE
+    SET phone = EXCLUDED.phone
+    WHERE public.users.phone IS NULL OR public.users.phone = '';
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_auth_user();
+
 -- ── 2. vehicles ──────────────────────────────────────────────
 
 CREATE TABLE public.vehicles (
@@ -203,12 +232,10 @@ CREATE POLICY "vehicles: admin delete"
   USING (public.is_admin());
 
 -- ── services RLS ─────────────────────────────────────────────
--- All authenticated users can read services (needed for booking).
--- Only admins can write.
+-- Public read for all users/visitors; admin only for write.
 
-CREATE POLICY "services: authenticated read"
+CREATE POLICY "services: public read"
   ON public.services FOR SELECT
-  TO authenticated
   USING (TRUE);
 
 CREATE POLICY "services: admin insert"
@@ -272,12 +299,11 @@ CREATE POLICY "job_updates: admin delete"
   USING (public.is_admin());
 
 -- ── shop_settings RLS ────────────────────────────────────────
--- Readable by all authenticated users (clients need it to show open/closed).
+-- Public read so all clients/visitors can see if the shop is open.
 -- Writable only by admins.
 
-CREATE POLICY "shop_settings: authenticated read"
+CREATE POLICY "shop_settings: public read"
   ON public.shop_settings FOR SELECT
-  TO authenticated
   USING (TRUE);
 
 CREATE POLICY "shop_settings: admin update"

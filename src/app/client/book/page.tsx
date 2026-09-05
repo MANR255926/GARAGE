@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -17,29 +17,80 @@ import {
 } from "lucide-react";
 import { BackgroundPattern } from "@/components/shared/BackgroundPattern";
 import { useTheme } from "@/components/shared/ThemeProvider";
+import { createClient } from "@/lib/supabase/client";
 import {
-  SERVICES,
+  SERVICES as FALLBACK_SERVICES,
   CLIENT_VEHICLE,
   type Vehicle,
+  type Service,
 } from "@/lib/mock-data";
 
-type Service = (typeof SERVICES)[number];
-
-export default function ClientBookPage() {
+function BookPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const preselectedServiceId = searchParams.get("service");
   const { theme, toggleTheme } = useTheme();
   const dark = theme === "dark";
 
-  const activeServices = SERVICES.filter((s) => s.active);
+  const [services, setServices] = useState<Service[]>([]);
 
   // Flow state: 1 | 2 | 3 | 4 (4 = success confirmed)
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
 
   // Selections
-  const [selectedService, setSelectedService] = useState<Service | null>(
-    activeServices[0] || null
-  );
+  const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle>(CLIENT_VEHICLE);
+
+  // Session check
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) {
+        router.replace("/client/login");
+      }
+    });
+  }, [router]);
+
+  useEffect(() => {
+    const supabase = createClient();
+    async function loadServices() {
+      try {
+        const { data, error } = await supabase
+          .from("services")
+          .select("id, name, description, price_min, price_max, active")
+          .eq("active", true)
+          .order("name", { ascending: true });
+
+        const list: Service[] =
+          data && !error && data.length > 0
+            ? data.map((item) => ({
+                id: item.id,
+                name: item.name,
+                description: item.description,
+                price_min: Number(item.price_min),
+                price_max: Number(item.price_max),
+                active: item.active,
+              }))
+            : FALLBACK_SERVICES.filter((s) => s.active);
+
+        setServices(list);
+
+        if (preselectedServiceId) {
+          const found = list.find((s) => s.id === preselectedServiceId);
+          if (found) setSelectedService(found);
+          else if (list.length > 0) setSelectedService(list[0]);
+        } else if (list.length > 0) {
+          setSelectedService(list[0]);
+        }
+      } catch (err) {
+        console.error("Failed to load services:", err);
+        const fallback = FALLBACK_SERVICES.filter((s) => s.active);
+        setServices(fallback);
+        if (fallback.length > 0) setSelectedService(fallback[0]);
+      }
+    }
+    loadServices();
+  }, [preselectedServiceId]);
 
   // Tomorrow's date default
   const tomorrow = new Date();
@@ -174,7 +225,7 @@ export default function ClientBookPage() {
             </div>
 
             <div className="flex flex-col gap-2.5">
-              {activeServices.map((svc) => {
+              {services.map((svc) => {
                 const isSelected = selectedService?.id === svc.id;
                 return (
                   <button
@@ -608,5 +659,13 @@ export default function ClientBookPage() {
         )}
       </div>
     </main>
+  );
+}
+
+export default function ClientBookPage() {
+  return (
+    <Suspense fallback={null}>
+      <BookPageContent />
+    </Suspense>
   );
 }

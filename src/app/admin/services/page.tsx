@@ -1,12 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Plus, Pencil, Trash2, X, Check } from "lucide-react";
 import { NavPill } from "@/components/admin/NavPill";
 import { BackgroundPattern } from "@/components/shared/BackgroundPattern";
-import { SERVICES as INITIAL_SERVICES } from "@/lib/mock-data";
-
-type Service = (typeof INITIAL_SERVICES)[number];
+import { type Service } from "@/lib/mock-data";
 
 type ServiceForm = Omit<Service, "id">;
 
@@ -19,10 +17,39 @@ const EMPTY_FORM: ServiceForm = {
 };
 
 export default function ServicesPage() {
-  const [services, setServices] = useState<Service[]>(INITIAL_SERVICES);
+  const [services, setServices] = useState<Service[]>([]);
+  const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<ServiceForm>(EMPTY_FORM);
+  const [saving, setSaving] = useState(false);
+
+  async function loadServices() {
+    try {
+      const res = await fetch("/api/services");
+      const data = await res.json();
+      if (data.services) {
+        setServices(
+          data.services.map((s: Record<string, unknown>) => ({
+            id: String(s.id),
+            name: String(s.name),
+            description: String(s.description || ""),
+            price_min: Number(s.price_min),
+            price_max: Number(s.price_max),
+            active: Boolean(s.active),
+          }))
+        );
+      }
+    } catch (err) {
+      console.error("Failed to load services from API:", err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadServices();
+  }, []);
 
   function openAdd() {
     setEditingId(null);
@@ -33,36 +60,86 @@ export default function ServicesPage() {
   function openEdit(svc: Service) {
     setEditingId(svc.id);
     setForm({
-      name:        svc.name,
+      name: svc.name,
       description: svc.description,
-      price_min:   svc.price_min,
-      price_max:   svc.price_max,
-      active:      svc.active,
+      price_min: svc.price_min,
+      price_max: svc.price_max,
+      active: svc.active,
     });
     setModalOpen(true);
   }
 
-  function handleSave(e: React.FormEvent) {
+  async function handleSave(e: React.FormEvent) {
     e.preventDefault();
-    if (editingId) {
-      setServices((prev) =>
-        prev.map((s) => (s.id === editingId ? { ...s, ...form } : s))
-      );
-    } else {
-      const newId = `svc-${Date.now()}`;
-      setServices((prev) => [...prev, { id: newId, ...form }]);
+    setSaving(true);
+    try {
+      if (editingId) {
+        const res = await fetch(`/api/services/${editingId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(form),
+        });
+        if (res.ok) {
+          const { service } = await res.json();
+          setServices((prev) =>
+            prev.map((s) => (s.id === editingId ? { ...s, ...service } : s))
+          );
+        }
+      } else {
+        const res = await fetch("/api/services", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(form),
+        });
+        if (res.ok) {
+          const { service } = await res.json();
+          setServices((prev) => [...prev, service]);
+        }
+      }
+      setModalOpen(false);
+    } catch (err) {
+      console.error("Error saving service:", err);
+    } finally {
+      setSaving(false);
     }
-    setModalOpen(false);
   }
 
-  function handleDelete(id: string) {
-    setServices((prev) => prev.filter((s) => s.id !== id));
+  async function handleDelete(id: string) {
+    try {
+      const res = await fetch(`/api/services/${id}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setServices((prev) => prev.filter((s) => s.id !== id));
+      }
+    } catch (err) {
+      console.error("Error deleting service:", err);
+    }
   }
 
-  function toggleActive(id: string) {
+  async function toggleActive(id: string) {
+    const current = services.find((s) => s.id === id);
+    if (!current) return;
+    const nextActive = !current.active;
+
+    // Optimistic UI update
     setServices((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, active: !s.active } : s))
+      prev.map((s) => (s.id === id ? { ...s, active: nextActive } : s))
     );
+
+    try {
+      await fetch(`/api/services/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active: nextActive }),
+      });
+    } catch (err) {
+      console.error("Error toggling active status:", err);
+      // Revert if error
+      setServices((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, active: !nextActive } : s))
+      );
+    }
   }
 
   return (
@@ -119,6 +196,13 @@ export default function ServicesPage() {
               </tr>
             </thead>
             <tbody>
+              {services.length === 0 && !loading && (
+                <tr>
+                  <td colSpan={5} className="px-5 py-8 text-center font-inter text-xs" style={{ color: "var(--slate)" }}>
+                    No services found. Click &quot;Add Service&quot; above to create one.
+                  </td>
+                </tr>
+              )}
               {services.map((svc, i) => (
                 <tr
                   key={svc.id}
@@ -236,6 +320,7 @@ export default function ServicesPage() {
                   <input
                     id={id}
                     type={type}
+                    required={key === "name" || key.startsWith("price")}
                     value={String(form[key as keyof ServiceForm])}
                     onChange={(e) =>
                       setForm((prev) => ({
@@ -270,10 +355,11 @@ export default function ServicesPage() {
               <button
                 id="btn-save-service"
                 type="submit"
-                className="w-full py-3 rounded-xl font-inter text-sm font-semibold transition-opacity hover:opacity-90"
+                disabled={saving}
+                className="w-full py-3 rounded-xl font-inter text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
                 style={{ background: "var(--lime)", color: "var(--ink-2)" }}
               >
-                {editingId ? "Save Changes" : "Add Service"}
+                {saving ? "Saving..." : editingId ? "Save Changes" : "Add Service"}
               </button>
             </form>
           </div>

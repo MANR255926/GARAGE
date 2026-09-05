@@ -1,9 +1,7 @@
 "use client";
 
 import { ArrowUpRight } from "lucide-react";
-import { SERVICES } from "@/lib/mock-data";
-
-type Service = (typeof SERVICES)[number];
+import { type Service } from "@/lib/mock-data";
 
 interface ServiceChipProps {
   service: Service;

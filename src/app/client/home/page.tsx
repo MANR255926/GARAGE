@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -16,9 +17,11 @@ import { BackgroundPattern } from "@/components/shared/BackgroundPattern";
 import { useTheme } from "@/components/shared/ThemeProvider";
 import { ShopStatusBanner } from "@/components/client/ShopStatusBanner";
 import { ServiceChip } from "@/components/client/ServiceChip";
+import { createClient } from "@/lib/supabase/client";
 import {
   CLIENT_JOB,
-  SERVICES,
+  SERVICES as FALLBACK_SERVICES,
+  type Service,
 } from "@/lib/mock-data";
 
 export default function ClientHomePage() {
@@ -26,7 +29,51 @@ export default function ClientHomePage() {
   const { theme, toggleTheme } = useTheme();
   const dark = theme === "dark";
 
-  const activeServices = SERVICES.filter((s) => s.active);
+  const [services, setServices] = useState<Service[]>([]);
+
+  // Session check
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) {
+        router.replace("/client/login");
+      }
+    });
+  }, [router]);
+
+  useEffect(() => {
+    const supabase = createClient();
+    async function fetchServices() {
+      try {
+        const { data, error } = await supabase
+          .from("services")
+          .select("id, name, description, price_min, price_max, active")
+          .eq("active", true)
+          .order("name", { ascending: true });
+
+        if (data && !error && data.length > 0) {
+          setServices(
+            data.map((item) => ({
+              id: item.id,
+              name: item.name,
+              description: item.description,
+              price_min: Number(item.price_min),
+              price_max: Number(item.price_max),
+              active: item.active,
+            }))
+          );
+        } else {
+          setServices(FALLBACK_SERVICES.filter((s) => s.active));
+        }
+      } catch (err) {
+        console.error("Failed to fetch services:", err);
+        setServices(FALLBACK_SERVICES.filter((s) => s.active));
+      }
+    }
+    fetchServices();
+  }, []);
+
+  const activeServices = services.length > 0 ? services : FALLBACK_SERVICES.filter((s) => s.active);
 
   // Overall progress percentage for CLIENT_JOB
   const overallProgress = Math.round(

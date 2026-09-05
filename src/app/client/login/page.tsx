@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Wrench, Sun, Moon, ChevronRight, Sparkles } from "lucide-react";
 import { BackgroundPattern } from "@/components/shared/BackgroundPattern";
 import { useTheme } from "@/components/shared/ThemeProvider";
+import { createClient } from "@/lib/supabase/client";
 
 type Step = "phone" | "otp";
 
@@ -18,6 +19,16 @@ export default function ClientLoginPage() {
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // If already logged in, redirect to home
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        router.replace("/client/home");
+      }
+    });
+  }, [router]);
 
   function handleSendCode(e: React.FormEvent) {
     e.preventDefault();
@@ -47,7 +58,7 @@ export default function ClientLoginPage() {
     }
   }
 
-  function handleVerify(e: React.FormEvent) {
+  async function handleVerify(e: React.FormEvent) {
     e.preventDefault();
     const code = otp.join("");
     if (code.length < 6) {
@@ -56,10 +67,34 @@ export default function ClientLoginPage() {
     }
     setError("");
     setLoading(true);
-    // Mock login delay then navigate to client home
-    setTimeout(() => {
-      router.push("/client/home");
-    }, 400);
+
+    try {
+      const supabase = createClient();
+      const { data, error: authError } = await supabase.auth.signInAnonymously({
+        options: {
+          data: {
+            phone: phone.trim() || undefined,
+            name: "Guest User",
+          },
+        },
+      });
+
+      if (authError) {
+        setError(authError.message || "Authentication failed. Please try again.");
+        setLoading(false);
+        return;
+      }
+
+      if (data?.session) {
+        router.push("/client/home");
+      } else {
+        router.push("/client/home");
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "An unexpected error occurred.";
+      setError(msg);
+      setLoading(false);
+    }
   }
 
   const shadow = dark

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { NavPill } from "@/components/admin/NavPill";
 import { BackgroundPattern } from "@/components/shared/BackgroundPattern";
 
@@ -8,15 +8,61 @@ export default function SettingsPage() {
   const [isOpen, setIsOpen] = useState(true);
   const [openingTime, setOpeningTime] = useState("08:00");
   const [closingTime, setClosingTime] = useState("17:00");
-  const [announcement, setAnnouncement] = useState(
-    "Welcome to Allyan Garage! Book your service today and get 10% off on first visits this month."
-  );
+  const [announcement, setAnnouncement] = useState("");
+  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  function handleSave(e: React.FormEvent) {
+  useEffect(() => {
+    async function loadSettings() {
+      try {
+        const res = await fetch("/api/shop-settings");
+        const data = await res.json();
+        if (data.settings) {
+          setIsOpen(Boolean(data.settings.is_open));
+          if (data.settings.opening_time) {
+            setOpeningTime(data.settings.opening_time.slice(0, 5));
+          }
+          if (data.settings.closing_time) {
+            setClosingTime(data.settings.closing_time.slice(0, 5));
+          }
+          if (data.settings.message) {
+            setAnnouncement(data.settings.message);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load settings:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadSettings();
+  }, []);
+
+  async function handleSave(e: React.FormEvent) {
     e.preventDefault();
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+    setSaving(true);
+    try {
+      const res = await fetch("/api/shop-settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          is_open: isOpen,
+          opening_time: openingTime,
+          closing_time: closingTime,
+          message: announcement,
+        }),
+      });
+
+      if (res.ok) {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2500);
+      }
+    } catch (err) {
+      console.error("Failed to save settings:", err);
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -155,13 +201,14 @@ export default function SettingsPage() {
             <button
               id="btn-save-settings"
               type="submit"
-              className="w-full py-3 rounded-xl font-inter text-sm font-semibold transition-all"
+              disabled={saving || loading}
+              className="w-full py-3 rounded-xl font-inter text-sm font-semibold transition-all disabled:opacity-50"
               style={{
                 background: saved ? "var(--fill)" : "var(--lime)",
                 color: "var(--ink-2)",
               }}
             >
-              {saved ? "✓ Saved!" : "Save Settings"}
+              {saving ? "Saving..." : saved ? "✓ Saved!" : "Save Settings"}
             </button>
           </form>
         </div>

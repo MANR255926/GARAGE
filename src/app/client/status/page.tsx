@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -12,6 +13,7 @@ import { BackgroundPattern } from "@/components/shared/BackgroundPattern";
 import { useTheme } from "@/components/shared/ThemeProvider";
 import { VehicleCard } from "@/components/client/VehicleCard";
 import { StatusStepper } from "@/components/client/StatusStepper";
+import { createClient } from "@/lib/supabase/client";
 import {
   CLIENT_JOB,
   CLIENT_VEHICLE,
@@ -23,6 +25,16 @@ export default function ClientStatusPage() {
   const router = useRouter();
   const { theme, toggleTheme } = useTheme();
   const dark = theme === "dark";
+
+  // Session check
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) {
+        router.replace("/client/login");
+      }
+    });
+  }, [router]);
 
   const mechanic = MECHANICS[CLIENT_JOB.mechanicId];
 

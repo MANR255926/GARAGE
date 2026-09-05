@@ -1,5 +1,5 @@
 // src/lib/mock-data.ts
-// All mock data — no real Supabase calls in this session.
+// All mock data â€” no real Supabase calls in this session.
 
 export type JobStatus = "pending" | "in_progress" | "on_hold" | "completed";
 
@@ -35,6 +35,17 @@ export interface Job {
   progress: ServiceProgress[];
 }
 
+export interface Service {
+  id: string;
+  name: string;
+  description: string;
+  price_min: number;
+  price_max: number;
+  active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface Vehicle {
   id: string;
   make: string;
@@ -68,7 +79,7 @@ export const MECHANICS: Record<string, Mechanic> = {
     experience: "5 Years",
     rating: "4.8",
     ratingCount: 61,
-    availability: "8 AM – 5 PM",
+    availability: "8 AM â€“ 5 PM",
     bio: "Handles engine diagnostics and tuning for the workshop's daily intake. Currently assigned to 3 active jobs.",
     skills: ["Engine Overhauls", "Electrical Systems", "Diagnostics"],
     activeJobs: 3,
@@ -81,7 +92,7 @@ export const MECHANICS: Record<string, Mechanic> = {
     experience: "3 Years",
     rating: "4.6",
     ratingCount: 38,
-    availability: "9 AM – 6 PM",
+    availability: "9 AM â€“ 6 PM",
     bio: "Specializes in preventive maintenance and fluid systems. Quick turnaround on routine services.",
     skills: ["Oil Change", "Fluid Flush", "Filter Replacement"],
     activeJobs: 2,
@@ -94,7 +105,7 @@ export const MECHANICS: Record<string, Mechanic> = {
     experience: "7 Years",
     rating: "4.9",
     ratingCount: 102,
-    availability: "8 AM – 4 PM",
+    availability: "8 AM â€“ 4 PM",
     bio: "Senior engine tuning specialist with extensive experience on Japanese and European makes.",
     skills: ["Engine Tuning", "Performance Mods", "ECU Calibration"],
     activeJobs: 4,
@@ -152,7 +163,7 @@ export const JOBS: Job[] = [
   },
 ];
 
-export const SERVICES = [
+export const SERVICES: Service[] = [
   { id: "svc-01", name: "Oil Change",      description: "Full synthetic oil & filter replacement", price_min: 2500,  price_max: 3500,  active: true  },
   { id: "svc-02", name: "Engine Tuning",   description: "Performance tuning & ECU calibration",    price_min: 8000,  price_max: 20000, active: true  },
   { id: "svc-03", name: "Paint & Body",    description: "Full exterior paint correction & repair",  price_min: 15000, price_max: 80000, active: true  },
