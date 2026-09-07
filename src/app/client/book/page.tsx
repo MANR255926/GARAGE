@@ -14,16 +14,28 @@ import {
   Moon,
   Sparkles,
   Check,
+  AlertCircle,
 } from "lucide-react";
 import { BackgroundPattern } from "@/components/shared/BackgroundPattern";
 import { useTheme } from "@/components/shared/ThemeProvider";
 import { createClient } from "@/lib/supabase/client";
 import {
   SERVICES as FALLBACK_SERVICES,
-  CLIENT_VEHICLE,
-  type Vehicle,
   type Service,
 } from "@/lib/mock-data";
+
+const PRESET_VEHICLES = [
+  {
+    make: "Honda",
+    model: "Civic Oriel",
+    plate_number: "LEE-4821",
+  },
+  {
+    make: "Toyota",
+    model: "Corolla Altis 1.6",
+    plate_number: "LHE-1190",
+  },
+];
 
 function BookPageContent() {
   const router = useRouter();
@@ -39,7 +51,24 @@ function BookPageContent() {
 
   // Selections
   const [selectedService, setSelectedService] = useState<Service | null>(null);
-  const [selectedVehicle, setSelectedVehicle] = useState<Vehicle>(CLIENT_VEHICLE);
+
+  // Editable Vehicle inputs
+  const [vehicleMake, setVehicleMake] = useState("Honda");
+  const [vehicleModel, setVehicleModel] = useState("Civic Oriel");
+  const [vehiclePlate, setVehiclePlate] = useState("LEE-4821");
+
+  // Tomorrow's date default
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const defaultDateStr = tomorrow.toISOString().split("T")[0];
+
+  const [bookingDate, setBookingDate] = useState(defaultDateStr);
+  const [bookingTime, setBookingTime] = useState("10:30");
+  const [notes, setNotes] = useState("");
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [bookingError, setBookingError] = useState<string | null>(null);
+  const [confirmedBookingId, setConfirmedBookingId] = useState<string | null>(null);
 
   // Session check
   useEffect(() => {
@@ -92,33 +121,118 @@ function BookPageContent() {
     loadServices();
   }, [preselectedServiceId]);
 
-  // Tomorrow's date default
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const defaultDateStr = tomorrow.toISOString().split("T")[0];
+  function handleSelectPreset(preset: (typeof PRESET_VEHICLES)[0]) {
+    setVehicleMake(preset.make);
+    setVehicleModel(preset.model);
+    setVehiclePlate(preset.plate_number);
+    setBookingError(null);
+  }
 
-  const [bookingDate, setBookingDate] = useState(defaultDateStr);
-  const [bookingTime, setBookingTime] = useState("10:00");
-  const [notes, setNotes] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  async function handleConfirmBooking() {
+    if (!selectedService) return;
+    const cleanPlate = vehiclePlate.trim().toUpperCase();
+    const cleanMake = vehicleMake.trim();
+    const cleanModel = vehicleModel.trim();
 
-  // Vehicles list (allows selecting client vehicle or alternate)
-  const vehicles: Vehicle[] = [
-    CLIENT_VEHICLE,
-    {
-      id: "veh-02",
-      make: "Toyota",
-      model: "Corolla Altis 1.6",
-      plate_number: "LHE-1190",
-    },
-  ];
+    if (!cleanPlate || !cleanMake || !cleanModel) {
+      setBookingError("Please provide vehicle make, model, and plate number.");
+      return;
+    }
 
-  function handleConfirmBooking() {
     setIsSubmitting(true);
-    setTimeout(() => {
+    setBookingError(null);
+
+    try {
+      const supabase = createClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.user) {
+        router.replace("/client/login");
+        return;
+      }
+
+      const userId = session.user.id;
+
+      // 1. Check if vehicle already exists for this user
+      const { data: existingVehicles, error: vehLookupErr } = await supabase
+        .from("vehicles")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("plate_number", cleanPlate)
+        .limit(1);
+
+      if (vehLookupErr) {
+        console.error("Vehicle lookup error:", vehLookupErr);
+      }
+
+      let vehicleId = existingVehicles?.[0]?.id;
+
+      // 2. If not found, insert new vehicle
+      if (!vehicleId) {
+        const { data: newVeh, error: insertVehErr } = await supabase
+          .from("vehicles")
+          .insert({
+            user_id: userId,
+            make: cleanMake,
+            model: cleanModel,
+            plate_number: cleanPlate,
+          })
+          .select("id")
+          .single();
+
+        if (insertVehErr) {
+          console.error("Insert vehicle error:", insertVehErr);
+          if (
+            insertVehErr.code === "23505" ||
+            insertVehErr.message?.toLowerCase().includes("unique") ||
+            insertVehErr.message?.toLowerCase().includes("plate_number")
+          ) {
+            setBookingError(
+              "This plate number is already registered to another account — please double check it or use a different vehicle."
+            );
+            setIsSubmitting(false);
+            return;
+          }
+          setBookingError(insertVehErr.message || "Failed to register vehicle.");
+          setIsSubmitting(false);
+          return;
+        }
+
+        vehicleId = newVeh.id;
+      }
+
+      // 3. Insert real booking
+      const { data: newBooking, error: bookingErr } = await supabase
+        .from("bookings")
+        .insert({
+          user_id: userId,
+          vehicle_id: vehicleId,
+          service_id: selectedService.id,
+          date: bookingDate,
+          time: bookingTime,
+          status: "pending",
+        })
+        .select("id")
+        .single();
+
+      if (bookingErr) {
+        console.error("Insert booking error:", bookingErr);
+        setBookingError(bookingErr.message || "Failed to create booking.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      setConfirmedBookingId(newBooking.id);
       setIsSubmitting(false);
       setStep(4);
-    }, 600);
+    } catch (err) {
+      console.error("Unexpected booking error:", err);
+      const msg = err instanceof Error ? err.message : "An unexpected error occurred.";
+      setBookingError(msg);
+      setIsSubmitting(false);
+    }
   }
 
   const shadow = dark
@@ -293,63 +407,126 @@ function BookPageContent() {
                 Vehicle &amp; Appointment Time
               </h2>
               <p className="font-inter text-xs" style={{ color: "var(--slate)" }}>
-                Select which car you are bringing and choose your preferred check-in slot.
+                Fill in or customize your vehicle details and select your preferred booking time.
               </p>
             </div>
 
-            {/* Vehicle Selector */}
+            {/* Quick-Select Preset Buttons */}
             <div className="flex flex-col gap-2">
               <label className="font-inter text-xs font-semibold" style={{ color: "var(--ink)" }}>
-                Select Vehicle
+                Quick Presets
               </label>
-              <div className="flex flex-col gap-2">
-                {vehicles.map((v) => {
-                  const isSelected = selectedVehicle.id === v.id;
+              <div className="grid grid-cols-2 gap-2">
+                {PRESET_VEHICLES.map((preset) => {
+                  const isMatch =
+                    vehiclePlate.trim().toUpperCase() === preset.plate_number.toUpperCase();
                   return (
                     <button
-                      key={v.id}
-                      onClick={() => setSelectedVehicle(v)}
+                      key={preset.plate_number}
                       type="button"
-                      className="flex items-center justify-between p-3.5 rounded-2xl border transition-all text-left"
+                      onClick={() => handleSelectPreset(preset)}
+                      className="p-3 rounded-2xl border text-left transition-all"
                       style={{
-                        background: "var(--card)",
-                        borderColor: isSelected ? "var(--lime)" : "var(--border)",
-                        borderWidth: isSelected ? "2px" : "1px",
+                        background: isMatch ? "var(--chip)" : "var(--card)",
+                        borderColor: isMatch ? "var(--lime)" : "var(--border)",
+                        borderWidth: isMatch ? "2px" : "1px",
                         boxShadow: shadow,
                       }}
                     >
-                      <div className="flex items-center gap-3">
-                        <div
-                          className="w-9 h-9 rounded-xl flex items-center justify-center"
-                          style={{ background: "var(--chip)" }}
-                        >
-                          <Car size={18} color="var(--ink)" />
-                        </div>
-                        <div>
-                          <p className="font-inter text-xs font-semibold" style={{ color: "var(--ink)" }}>
-                            {v.make} {v.model}
-                          </p>
-                          <span
-                            className="font-mono text-[10px] font-semibold px-1.5 py-0.5 rounded"
-                            style={{ background: "var(--ink-2)", color: "var(--lime)" }}
-                          >
-                            {v.plate_number}
-                          </span>
-                        </div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <Car size={14} color="var(--ink)" />
+                        <span className="font-inter text-xs font-semibold truncate" style={{ color: "var(--ink)" }}>
+                          {preset.make} {preset.model}
+                        </span>
                       </div>
-
-                      <div
-                        className="w-5 h-5 rounded-full flex items-center justify-center border transition-colors"
-                        style={{
-                          background: isSelected ? "var(--lime)" : "transparent",
-                          borderColor: isSelected ? "var(--lime)" : "var(--slate)",
-                        }}
+                      <span
+                        className="font-mono text-[10px] font-semibold px-1.5 py-0.5 rounded"
+                        style={{ background: "var(--ink-2)", color: "var(--lime)" }}
                       >
-                        {isSelected && <Check size={12} className="stroke-[3] text-black" />}
-                      </div>
+                        {preset.plate_number}
+                      </span>
                     </button>
                   );
                 })}
+              </div>
+            </div>
+
+            {/* Editable Vehicle Inputs */}
+            <div
+              className="rounded-2xl p-4 border flex flex-col gap-3"
+              style={{
+                background: "var(--card)",
+                borderColor: "var(--border)",
+                boxShadow: shadow,
+              }}
+            >
+              <span className="font-inter text-xs font-semibold" style={{ color: "var(--ink)" }}>
+                Vehicle Details
+              </span>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label htmlFor="input-vehicle-make" className="font-inter text-[11px]" style={{ color: "var(--slate)" }}>
+                    Make
+                  </label>
+                  <input
+                    id="input-vehicle-make"
+                    type="text"
+                    required
+                    value={vehicleMake}
+                    onChange={(e) => setVehicleMake(e.target.value)}
+                    placeholder="e.g. Honda"
+                    className="w-full rounded-xl px-3 py-2 font-inter text-xs border outline-none"
+                    style={{
+                      background: "var(--chip)",
+                      color: "var(--ink)",
+                      borderColor: "var(--border)",
+                    }}
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label htmlFor="input-vehicle-model" className="font-inter text-[11px]" style={{ color: "var(--slate)" }}>
+                    Model
+                  </label>
+                  <input
+                    id="input-vehicle-model"
+                    type="text"
+                    required
+                    value={vehicleModel}
+                    onChange={(e) => setVehicleModel(e.target.value)}
+                    placeholder="e.g. Civic Oriel"
+                    className="w-full rounded-xl px-3 py-2 font-inter text-xs border outline-none"
+                    style={{
+                      background: "var(--chip)",
+                      color: "var(--ink)",
+                      borderColor: "var(--border)",
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label htmlFor="input-vehicle-plate" className="font-inter text-[11px]" style={{ color: "var(--slate)" }}>
+                  Plate Number
+                </label>
+                <input
+                  id="input-vehicle-plate"
+                  type="text"
+                  required
+                  value={vehiclePlate}
+                  onChange={(e) => {
+                    setVehiclePlate(e.target.value.toUpperCase());
+                    setBookingError(null);
+                  }}
+                  placeholder="e.g. LEE-4821"
+                  className="w-full rounded-xl px-3 py-2 font-mono text-xs font-semibold border outline-none tracking-wider"
+                  style={{
+                    background: "var(--chip)",
+                    color: "var(--ink)",
+                    borderColor: "var(--border)",
+                  }}
+                />
               </div>
             </div>
 
@@ -446,8 +623,11 @@ function BookPageContent() {
               <button
                 id="btn-step2-next"
                 type="button"
-                disabled={!bookingDate || !bookingTime}
-                onClick={() => setStep(3)}
+                disabled={!bookingDate || !bookingTime || !vehiclePlate.trim() || !vehicleMake.trim()}
+                onClick={() => {
+                  setBookingError(null);
+                  setStep(3);
+                }}
                 className="w-2/3 flex items-center justify-center gap-2 py-3.5 rounded-xl font-inter text-sm font-semibold transition-all hover:opacity-90 active:scale-[0.99] disabled:opacity-40"
                 style={{ background: "var(--lime)", color: "var(--ink-2)" }}
               >
@@ -468,6 +648,21 @@ function BookPageContent() {
                 Please check the details below before placing your service appointment.
               </p>
             </div>
+
+            {/* Inline error if any */}
+            {bookingError && (
+              <div
+                className="rounded-xl p-3 flex items-start gap-2.5 border"
+                style={{
+                  background: "rgba(239, 68, 68, 0.1)",
+                  borderColor: "#EF4444",
+                  color: "#EF4444",
+                }}
+              >
+                <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                <p className="font-inter text-xs leading-relaxed">{bookingError}</p>
+              </div>
+            )}
 
             {/* Summary card */}
             <div
@@ -503,14 +698,14 @@ function BookPageContent() {
                     Vehicle
                   </span>
                   <p className="font-inter text-sm font-semibold" style={{ color: "var(--ink)" }}>
-                    {selectedVehicle.make} {selectedVehicle.model}
+                    {vehicleMake} {vehicleModel}
                   </p>
                 </div>
                 <span
                   className="font-mono text-xs font-semibold px-2 py-0.5 rounded"
                   style={{ background: "var(--ink-2)", color: "var(--lime)" }}
                 >
-                  {selectedVehicle.plate_number}
+                  {vehiclePlate.trim().toUpperCase()}
                 </span>
               </div>
 
@@ -553,7 +748,7 @@ function BookPageContent() {
             >
               <Sparkles size={15} className="shrink-0 mt-0.5" style={{ color: "var(--ink)" }} />
               <p className="font-inter text-[11px] leading-relaxed" style={{ color: "var(--slate)" }}>
-                You will receive an automated SMS confirmation with intake lane instructions.
+                Your service reservation will be recorded instantly in the Allyan Garage workshop schedule.
               </p>
             </div>
 
@@ -600,7 +795,7 @@ function BookPageContent() {
                 className="font-mono text-xs font-semibold tracking-wider uppercase px-2.5 py-1 rounded-full inline-block mb-2"
                 style={{ background: "var(--chip)", color: "var(--ink)" }}
               >
-                Booking ID: #AG-7429
+                Booking ID: #{confirmedBookingId ? confirmedBookingId.slice(0, 8).toUpperCase() : "AG-LIVE"}
               </span>
               <h2
                 className="font-oswald text-2xl font-semibold mb-1"
@@ -610,7 +805,7 @@ function BookPageContent() {
               </h2>
               <p className="font-inter text-xs max-w-xs mx-auto" style={{ color: "var(--slate)" }}>
                 We have scheduled your <strong>{selectedService?.name}</strong> for{" "}
-                <strong>{selectedVehicle.make} {selectedVehicle.model}</strong> on{" "}
+                <strong>{vehicleMake} {vehicleModel}</strong> on{" "}
                 <strong>{bookingDate}</strong> at <strong>{bookingTime}</strong>.
               </p>
             </div>
@@ -628,7 +823,7 @@ function BookPageContent() {
               </p>
               <ul className="font-inter text-xs space-y-1.5 list-disc pl-4" style={{ color: "var(--slate)" }}>
                 <li>Arrive at Allyan Garage 10 minutes prior to your slot.</li>
-                <li>Show your plate number <strong>{selectedVehicle.plate_number}</strong> at Bay 1.</li>
+                <li>Show your plate number <strong>{vehiclePlate.trim().toUpperCase()}</strong> at Bay 1.</li>
                 <li>Track live job progress on your mobile portal anytime.</li>
               </ul>
             </div>

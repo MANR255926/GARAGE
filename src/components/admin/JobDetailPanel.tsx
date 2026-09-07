@@ -1,35 +1,55 @@
 "use client";
 
-import { Camera, Download, Share2, Maximize2 } from "lucide-react";
+import { Camera, Download, Share2, Maximize2, Clock } from "lucide-react";
 import { ProgressBar } from "./ProgressBar";
 import type { Job } from "@/lib/mock-data";
 import { useTheme } from "@/components/shared/ThemeProvider";
 
 const STATUS_LABELS: Record<string, string> = {
-  pending:     "Pending",
+  pending: "Pending",
   in_progress: "In Progress",
-  on_hold:     "On Hold",
-  completed:   "Completed",
+  on_hold: "On Hold",
+  completed: "Completed",
 };
 
 const STATUS_DOT: Record<string, string> = {
-  pending:     "#FAAD14",
+  pending: "#FAAD14",
   in_progress: "#FB923C",
-  on_hold:     "#8A93A0",
-  completed:   "#22C55E",
+  on_hold: "#8A93A0",
+  completed: "#22C55E",
 };
+
+export interface RealJobUpdate {
+  id?: string;
+  status_text: string;
+  note: string | null;
+  photo_url: string | null;
+  created_at: string;
+}
 
 interface JobDetailPanelProps {
   job: Job;
+  latestUpdate?: RealJobUpdate | null;
   onUpdateStatus?: () => void;
 }
 
-export function JobDetailPanel({ job, onUpdateStatus }: JobDetailPanelProps) {
+export function JobDetailPanel({ job, latestUpdate, onUpdateStatus }: JobDetailPanelProps) {
   const { theme } = useTheme();
   const dark = theme === "dark";
   const shadow = dark
     ? "0 1px 3px rgba(0,0,0,0.35)"
     : "0 1px 3px rgba(20,22,26,0.06)";
+
+  const currentStatus = latestUpdate ? latestUpdate.status_text : job.status;
+  const statusLabel = STATUS_LABELS[currentStatus] ?? currentStatus;
+  const statusDotColor = STATUS_DOT[currentStatus] ?? "#FB923C";
+
+  const formattedTime = latestUpdate?.created_at
+    ? new Date(latestUpdate.created_at).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : job.photoTime;
 
   return (
     <div className="col-span-6 flex flex-col gap-5">
@@ -53,48 +73,71 @@ export function JobDetailPanel({ job, onUpdateStatus }: JobDetailPanelProps) {
           </div>
           <span
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full font-inter text-[11px] font-semibold"
-            style={{ background: "var(--warn)", color: "var(--ink)" }}
+            style={{
+              background:
+                currentStatus === "completed"
+                  ? "var(--lime)"
+                  : currentStatus === "on_hold"
+                  ? "rgba(239,68,68,0.15)"
+                  : "var(--warn)",
+              color: currentStatus === "completed" ? "var(--ink-2)" : "var(--ink)",
+            }}
           >
             <span
               className="w-1.5 h-1.5 rounded-full"
-              style={{ background: STATUS_DOT[job.status] ?? "#FB923C" }}
+              style={{ background: statusDotColor }}
             />
-            {STATUS_LABELS[job.status] ?? job.status}
+            {statusLabel}
           </span>
         </div>
 
-        {/* Photo placeholder */}
-        <div
-          className="relative w-full aspect-video rounded-xl flex items-center justify-center"
-          style={{ background: "var(--chip)" }}
-        >
-          <div className="flex flex-col items-center gap-2">
-            <Camera size={26} color="var(--slate)" />
-            <span className="font-inter text-xs" style={{ color: "var(--slate)" }}>
-              Photo update — uploaded {job.photoTime}
+        {/* Photo / Update display */}
+        {latestUpdate ? (
+          <div
+            className="relative w-full aspect-video rounded-xl flex items-center justify-center"
+            style={{ background: "var(--chip)" }}
+          >
+            <div className="flex flex-col items-center gap-2">
+              <Camera size={26} color="var(--slate)" />
+              <span className="font-inter text-xs" style={{ color: "var(--slate)" }}>
+                Update logged at {formattedTime}
+              </span>
+            </div>
+            <span
+              className="absolute top-3 right-3 px-2.5 py-1 rounded-full font-inter text-[10px] font-semibold"
+              style={{ background: "var(--card)", color: "var(--ink)" }}
+            >
+              Job Update
             </span>
+            <button
+              className="absolute bottom-3 right-3 w-8 h-8 rounded-full flex items-center justify-center"
+              style={{ background: "var(--card)" }}
+              aria-label="Expand photo"
+            >
+              <Maximize2 size={13} color="var(--ink)" />
+            </button>
           </div>
-          <span
-            className="absolute top-3 right-3 px-2.5 py-1 rounded-full font-inter text-[10px] font-semibold"
-            style={{ background: "var(--card)", color: "var(--ink)" }}
+        ) : (
+          <div
+            className="relative w-full aspect-video rounded-xl flex flex-col items-center justify-center gap-2 border border-dashed"
+            style={{
+              background: "var(--chip)",
+              borderColor: "var(--border)",
+            }}
           >
-            Photo Update
-          </span>
-          <button
-            className="absolute bottom-3 right-3 w-8 h-8 rounded-full flex items-center justify-center"
-            style={{ background: "var(--card)" }}
-            aria-label="Expand photo"
-          >
-            <Maximize2 size={13} color="var(--ink)" />
-          </button>
-        </div>
+            <Clock size={24} color="var(--slate)" />
+            <p className="font-inter text-xs font-medium" style={{ color: "var(--slate)" }}>
+              No updates yet — booking scheduled
+            </p>
+          </div>
+        )}
 
         {/* Note */}
         <p
           className="font-inter text-xs mt-3 p-3 rounded-lg"
           style={{ background: "var(--chip)", color: "var(--ink)" }}
         >
-          &quot;{job.note}&quot;
+          &quot;{latestUpdate ? latestUpdate.note || "Status updated by technician." : job.note}&quot;
         </p>
 
         {/* Action buttons */}
