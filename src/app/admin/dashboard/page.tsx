@@ -222,7 +222,7 @@ export default function DashboardPage() {
         <NavPill activeTab={1} />
 
         {/* Page header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-4">
             <button
               onClick={() => router.push("/client/home")}
@@ -286,10 +286,10 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Main 12-column grid */}
-        <div className="grid grid-cols-12 gap-5">
-          {/* Job queue — col-span-3 */}
-          <div className="col-span-3 flex flex-col gap-3">
+        {/* Main grid with responsive collapse */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          {/* Job queue — col-span-1 on mobile/tablet, col-span-3 on desktop */}
+          <div className="col-span-1 lg:col-span-3 flex flex-col gap-3">
             {loadingBookings && bookings.length === 0 ? (
               <div
                 className="rounded-2xl p-6 border text-center flex flex-col items-center gap-2"
@@ -365,7 +365,7 @@ export default function DashboardPage() {
             />
           ) : (
             <div
-              className="col-span-6 rounded-2xl p-12 border text-center flex flex-col items-center justify-center gap-3"
+              className="col-span-1 lg:col-span-6 rounded-2xl p-12 border text-center flex flex-col items-center justify-center gap-3"
               style={{ background: "var(--card)", borderColor: "var(--border)" }}
             >
               <Wrench size={32} color="var(--slate)" />

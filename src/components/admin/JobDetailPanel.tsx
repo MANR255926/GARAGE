@@ -52,7 +52,7 @@ export function JobDetailPanel({ job, latestUpdate, onUpdateStatus }: JobDetailP
     : job.photoTime;
 
   return (
-    <div className="col-span-6 flex flex-col gap-5">
+    <div className="col-span-1 lg:col-span-6 flex flex-col gap-5">
       {/* ── Latest Update card ── */}
       <div
         className="rounded-2xl p-4"

@@ -16,7 +16,7 @@ export function MechanicPanel({ mechanic }: MechanicPanelProps) {
   ];
 
   return (
-    <div className="col-span-3">
+    <div className="col-span-1 lg:col-span-3">
       <div
         className="rounded-2xl p-5"
         style={{

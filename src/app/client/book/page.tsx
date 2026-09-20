@@ -187,11 +187,14 @@ function BookPageContent() {
           if (
             insertVehErr.code === "23505" ||
             insertVehErr.message?.toLowerCase().includes("unique") ||
-            insertVehErr.message?.toLowerCase().includes("plate_number")
+            insertVehErr.message?.toLowerCase().includes("plate_number") ||
+            insertVehErr.message?.toLowerCase().includes("already registered") ||
+            insertVehErr.message?.toLowerCase().includes("already exists")
           ) {
             setBookingError(
-              "This plate number is already registered to another account — please double check it or use a different vehicle."
+              `License plate "${cleanPlate}" is already registered to another customer. If this is your vehicle, please sign in with your original phone number, or enter your vehicle's unique plate number.`
             );
+            setStep(2);
             setIsSubmitting(false);
             return;
           }
@@ -411,6 +414,25 @@ function BookPageContent() {
               </p>
             </div>
 
+            {/* Inline warning banner if plate collision or booking error */}
+            {bookingError && (
+              <div
+                id="booking-plate-error-banner"
+                className="rounded-xl p-3.5 flex items-start gap-2.5 border transition-all"
+                style={{
+                  background: "rgba(239, 68, 68, 0.1)",
+                  borderColor: "#EF4444",
+                  color: "#EF4444",
+                }}
+              >
+                <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                <div className="flex flex-col gap-0.5">
+                  <p className="font-inter text-xs font-semibold">Plate Registration Notice</p>
+                  <p className="font-inter text-xs leading-relaxed">{bookingError}</p>
+                </div>
+              </div>
+            )}
+
             {/* Quick-Select Preset Buttons */}
             <div className="flex flex-col gap-2">
               <label className="font-inter text-xs font-semibold" style={{ color: "var(--ink)" }}>
@@ -520,13 +542,18 @@ function BookPageContent() {
                     setBookingError(null);
                   }}
                   placeholder="e.g. LEE-4821"
-                  className="w-full rounded-xl px-3 py-2 font-mono text-xs font-semibold border outline-none tracking-wider"
+                  className="w-full rounded-xl px-3 py-2 font-mono text-xs font-semibold border outline-none tracking-wider transition-colors"
                   style={{
                     background: "var(--chip)",
                     color: "var(--ink)",
-                    borderColor: "var(--border)",
+                    borderColor: bookingError ? "#EF4444" : "var(--border)",
                   }}
                 />
+                {bookingError && (
+                  <p className="font-inter text-[11px] font-medium" style={{ color: "#EF4444" }}>
+                    Please check or update this plate number.
+                  </p>
+                )}
               </div>
             </div>
 
@@ -652,15 +679,25 @@ function BookPageContent() {
             {/* Inline error if any */}
             {bookingError && (
               <div
-                className="rounded-xl p-3 flex items-start gap-2.5 border"
+                className="rounded-xl p-3 flex items-start justify-between gap-2.5 border"
                 style={{
                   background: "rgba(239, 68, 68, 0.1)",
                   borderColor: "#EF4444",
                   color: "#EF4444",
                 }}
               >
-                <AlertCircle size={16} className="shrink-0 mt-0.5" />
-                <p className="font-inter text-xs leading-relaxed">{bookingError}</p>
+                <div className="flex items-start gap-2">
+                  <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                  <p className="font-inter text-xs leading-relaxed">{bookingError}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setStep(2)}
+                  className="text-xs font-semibold underline shrink-0 cursor-pointer ml-2"
+                  style={{ color: "var(--ink)" }}
+                >
+                  Edit Plate
+                </button>
               </div>
             )}
 
